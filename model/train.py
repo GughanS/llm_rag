@@ -404,7 +404,7 @@ def parse_args() -> argparse.Namespace:
 
     # Data
     parser.add_argument("--dataset", type=str, default="tinystories",
-                        choices=["tinystories", "openwebtext"],
+                        choices=["tinystories", "tinyshakespeare"],
                         help="Dataset to use for training")
     parser.add_argument("--max_stories", type=int, default=None,
                         help="Cap on stories to load (for debugging)")

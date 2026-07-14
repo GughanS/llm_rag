@@ -3,7 +3,7 @@ Dataset loading and tokenisation for causal language modelling.
 
 Supports multiple datasets:
   - TinyStories (default): Microsoft's TinyStories dataset
-  - OpenWebText: stas/openwebtext-10k (reliable fallback)
+  - TinyShakespeare: Karpathy's char-rnn dataset (reliable HTTP fallback)
   - Synthetic: Random tokens for pipeline validation
 
 All datasets are tokenised with GPT-2's BPE tokenizer and packed into
@@ -64,9 +64,9 @@ class PackedTextDataset(Dataset):
     Each sample is a (input_ids, targets) pair of shape (max_seq_len,),
     where targets are input_ids shifted right by one position.
 
-    Supports multiple HuggingFace datasets via the `dataset_name` parameter:
-      - "tinystories": roneneldan/TinyStories (text field: "text")
-      - "openwebtext": stas/openwebtext-10k   (text field: "text")
+    Supports multiple datasets via the `dataset_name` parameter:
+      - "tinystories": roneneldan/TinyStories (via HF datasets)
+      - "tinyshakespeare": Karpathy's dataset (raw HTTP, bypasses HF)
 
     Args:
         dataset_name: which dataset to load
@@ -79,14 +79,14 @@ class PackedTextDataset(Dataset):
     # Registry of supported datasets
     _DATASETS = {
         "tinystories": {
+            "type": "hf",
             "path": "roneneldan/TinyStories",
             "text_field": "text",
             "split_map": {"train": "train", "validation": "validation"},
         },
-        "openwebtext": {
-            "path": "stas/openwebtext-10k",
-            "text_field": "text",
-            "split_map": {"train": "train", "validation": "train"}, # openwebtext-10k only has a train split
+        "tinyshakespeare": {
+            "type": "url",
+            "url": "https://raw.githubusercontent.com/karpathy/char-rnn/master/data/tinyshakespeare/input.txt",
         },
     }
 
@@ -110,39 +110,59 @@ class PackedTextDataset(Dataset):
                 f"Available: {list(self._DATASETS.keys())}"
             )
         ds_config = self._DATASETS[dataset_name]
-        hf_split = ds_config["split_map"].get(split, split)
-        text_field = ds_config["text_field"]
+        ds_type = ds_config.get("type", "hf")
 
         # Load tokenizer
         self.tokenizer = AutoTokenizer.from_pretrained(tokenizer_name)
         if self.tokenizer.pad_token is None:
             self.tokenizer.pad_token = self.tokenizer.eos_token
 
-        # Load dataset — try streaming first, then fall back to full download
-        load_kwargs = {
-            "path": ds_config["path"],
-            "split": hf_split,
-            "trust_remote_code": True,  # Required for older datasets with load scripts
-        }
-        if "name" in ds_config:
-            load_kwargs["name"] = ds_config["name"]
+        if ds_type == "hf":
+            hf_split = ds_config["split_map"].get(split, split)
+            text_field = ds_config["text_field"]
+            
+            # Load dataset — try streaming first, then fall back to full download
+            load_kwargs = {
+                "path": ds_config["path"],
+                "split": hf_split,
+                "trust_remote_code": True,  # Required for older datasets with load scripts
+            }
+            if "name" in ds_config:
+                load_kwargs["name"] = ds_config["name"]
 
-        try:
-            ds = load_dataset(**load_kwargs, streaming=True)
-            samples = []
-            for i, example in enumerate(ds):
-                if max_samples is not None and i >= max_samples:
-                    break
-                text = example[text_field].strip()
-                if text:  # skip empty lines (common in wikitext)
-                    samples.append(text)
-            print(f"  Loaded {len(samples)} samples from {dataset_name} via streaming")
-        except Exception as e:
-            print(f"  Streaming failed ({e}), trying full download...")
-            ds = load_dataset(**load_kwargs)
+            try:
+                ds = load_dataset(**load_kwargs, streaming=True)
+                samples = []
+                for i, example in enumerate(ds):
+                    if max_samples is not None and i >= max_samples:
+                        break
+                    text = example[text_field].strip()
+                    if text:  # skip empty lines
+                        samples.append(text)
+                print(f"  Loaded {len(samples)} samples from {dataset_name} via streaming")
+            except Exception as e:
+                print(f"  Streaming failed ({e}), trying full download...")
+                ds = load_dataset(**load_kwargs)
+                if max_samples is not None:
+                    ds = ds.select(range(min(max_samples, len(ds))))
+                samples = [ex[text_field].strip() for ex in ds if ex[text_field].strip()]
+        
+        elif ds_type == "url":
+            import urllib.request
+            print(f"  Downloading {dataset_name} via HTTP...")
+            req = urllib.request.Request(ds_config["url"], headers={'User-Agent': 'Mozilla/5.0'})
+            with urllib.request.urlopen(req) as response:
+                text = response.read().decode('utf-8')
+            
+            # Simple train/val split (90/10) for raw text files
+            split_idx = int(len(text) * 0.9)
+            text = text[:split_idx] if split == "train" else text[split_idx:]
+            
+            # Split into chunks (paragraphs) to mimic discrete samples
+            samples = [p.strip() for p in text.split("\n\n") if p.strip()]
             if max_samples is not None:
-                ds = ds.select(range(min(max_samples, len(ds))))
-            samples = [ex[text_field].strip() for ex in ds if ex[text_field].strip()]
+                samples = samples[:max_samples]
+            print(f"  Loaded {len(samples)} samples from {dataset_name}")
 
         # Tokenise all texts and concatenate into one long token stream
         all_tokens: list[int] = []
