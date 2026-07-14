@@ -51,7 +51,8 @@ class RateLimiter:
                 
             # 4. Save state back to Redis
             pipe.hset(key, mapping={"tokens": new_tokens, "last_update": now})
-            pipe.expire(key, int(self.capacity / self.refill_rate) + 60) # TTL to clean up inactive users
+            ttl_seconds = int(self.capacity / self.refill_rate) + 60 if self.refill_rate > 0 else 60
+            pipe.expire(key, ttl_seconds) # TTL to clean up inactive users
             pipe.execute()
             
             return allowed
