@@ -31,7 +31,7 @@ from torch.utils.data import DataLoader
 
 from model.config import TransformerConfig
 from model.transformer import Transformer
-from model.dataset import TinyStoriesDataset, SyntheticDataset
+from model.dataset import PackedTextDataset, SyntheticDataset
 
 
 def set_seed(seed: int) -> None:
@@ -179,16 +179,18 @@ def train(args: argparse.Namespace) -> None:
             vocab_size=config.vocab_size,
         )
     else:
-        print("\nLoading TinyStories dataset...")
-        train_ds = TinyStoriesDataset(
+        print(f"\nLoading {args.dataset} dataset...")
+        train_ds = PackedTextDataset(
+            dataset_name=args.dataset,
             split="train",
             max_seq_len=config.max_seq_len,
-            max_stories=args.max_stories,
+            max_samples=args.max_stories,
         )
-        val_ds = TinyStoriesDataset(
+        val_ds = PackedTextDataset(
+            dataset_name=args.dataset,
             split="validation",
             max_seq_len=config.max_seq_len,
-            max_stories=args.max_stories // 10 if args.max_stories else None,
+            max_samples=args.max_stories // 10 if args.max_stories else None,
         )
     print(f"  Train: {len(train_ds):,} chunks")
     print(f"  Val:   {len(val_ds):,} chunks")
@@ -401,6 +403,9 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--num_workers", type=int, default=2)
 
     # Data
+    parser.add_argument("--dataset", type=str, default="tinystories",
+                        choices=["tinystories", "wikitext"],
+                        help="Dataset to use for training")
     parser.add_argument("--max_stories", type=int, default=None,
                         help="Cap on stories to load (for debugging)")
     parser.add_argument("--synthetic", action="store_true",

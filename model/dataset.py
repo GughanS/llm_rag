@@ -1,12 +1,16 @@
 """
-TinyStories dataset loading and tokenisation.
+Dataset loading and tokenisation for causal language modelling.
 
-Loads the Microsoft TinyStories dataset via HuggingFace `datasets` and
-tokenises with GPT-2's BPE tokenizer. Stories are packed into fixed-length
-chunks (max_seq_len) for efficient, padding-free batching.
+Supports multiple datasets:
+  - TinyStories (default): Microsoft's TinyStories dataset
+  - WikiText: WikiText-103-raw-v1 (reliable fallback)
+  - Synthetic: Random tokens for pipeline validation
+
+All datasets are tokenised with GPT-2's BPE tokenizer and packed into
+fixed-length chunks for efficient, padding-free batching.
 
 Why packing?
-  Padding wastes compute — short stories padded to max_seq_len burn FLOPs on
+  Padding wastes compute — short texts padded to max_seq_len burn FLOPs on
   PAD tokens. Packing concatenates all tokenised text into one long stream and
   slices it into equal-length windows. Every token in every batch is a real
   training signal.
@@ -54,25 +58,46 @@ class SyntheticDataset(Dataset):
         return self._vocab_size
 
 
-class TinyStoriesDataset(Dataset):
+class PackedTextDataset(Dataset):
     """Pre-tokenised, packed dataset for causal language modelling.
 
     Each sample is a (input_ids, targets) pair of shape (max_seq_len,),
     where targets are input_ids shifted right by one position.
 
+    Supports multiple HuggingFace datasets via the `dataset_name` parameter:
+      - "tinystories": roneneldan/TinyStories (text field: "text")
+      - "wikitext":    wikitext-103-raw-v1    (text field: "text")
+
     Args:
-        split: "train" or "validation"
+        dataset_name: which dataset to load
+        split: "train" or "validation" (mapped to "test" for wikitext)
         max_seq_len: sequence length for each training sample
         tokenizer_name: HuggingFace tokenizer to use
-        max_stories: optional cap on number of stories to load (for debugging)
+        max_samples: optional cap on number of samples to load
     """
+
+    # Registry of supported datasets
+    _DATASETS = {
+        "tinystories": {
+            "path": "roneneldan/TinyStories",
+            "text_field": "text",
+            "split_map": {"train": "train", "validation": "validation"},
+        },
+        "wikitext": {
+            "path": "wikitext",
+            "name": "wikitext-103-raw-v1",
+            "text_field": "text",
+            "split_map": {"train": "train", "validation": "validation"},
+        },
+    }
 
     def __init__(
         self,
+        dataset_name: str = "tinystories",
         split: str = "train",
         max_seq_len: int = 512,
         tokenizer_name: str = "gpt2",
-        max_stories: int | None = None,
+        max_samples: int | None = None,
     ):
         super().__init__()
         self.max_seq_len = max_seq_len
@@ -80,42 +105,53 @@ class TinyStoriesDataset(Dataset):
         from transformers import AutoTokenizer
         from datasets import load_dataset
 
+        if dataset_name not in self._DATASETS:
+            raise ValueError(
+                f"Unknown dataset '{dataset_name}'. "
+                f"Available: {list(self._DATASETS.keys())}"
+            )
+        ds_config = self._DATASETS[dataset_name]
+        hf_split = ds_config["split_map"].get(split, split)
+        text_field = ds_config["text_field"]
+
         # Load tokenizer
         self.tokenizer = AutoTokenizer.from_pretrained(tokenizer_name)
         if self.tokenizer.pad_token is None:
             self.tokenizer.pad_token = self.tokenizer.eos_token
 
-        # Load dataset — use streaming to avoid bulk parquet download issues
-        # with HuggingFace's Xet CDN
-        try:
-            ds = load_dataset("roneneldan/TinyStories", split=split, streaming=True)
-            # Streaming mode: iterate and collect up to max_stories
-            stories = []
-            for i, example in enumerate(ds):
-                if max_stories is not None and i >= max_stories:
-                    break
-                stories.append(example)
-            print(f"  Loaded {len(stories)} stories via streaming")
-        except Exception:
-            # Fallback: non-streaming (requires full download)
-            ds = load_dataset("roneneldan/TinyStories", split=split)
-            if max_stories is not None:
-                ds = ds.select(range(min(max_stories, len(ds))))
-            stories = list(ds)
+        # Load dataset — try streaming first, then fall back to full download
+        load_kwargs = {"path": ds_config["path"], "split": hf_split}
+        if "name" in ds_config:
+            load_kwargs["name"] = ds_config["name"]
 
-        # Tokenise all stories and concatenate into one long token stream
+        try:
+            ds = load_dataset(**load_kwargs, streaming=True)
+            samples = []
+            for i, example in enumerate(ds):
+                if max_samples is not None and i >= max_samples:
+                    break
+                text = example[text_field].strip()
+                if text:  # skip empty lines (common in wikitext)
+                    samples.append(text)
+            print(f"  Loaded {len(samples)} samples from {dataset_name} via streaming")
+        except Exception as e:
+            print(f"  Streaming failed ({e}), trying full download...")
+            ds = load_dataset(**load_kwargs)
+            if max_samples is not None:
+                ds = ds.select(range(min(max_samples, len(ds))))
+            samples = [ex[text_field].strip() for ex in ds if ex[text_field].strip()]
+
+        # Tokenise all texts and concatenate into one long token stream
         all_tokens: list[int] = []
         eos_id = self.tokenizer.eos_token_id
-        for example in stories:
-            tokens = self.tokenizer.encode(example["text"])
+        for text in samples:
+            tokens = self.tokenizer.encode(text)
             all_tokens.extend(tokens)
-            all_tokens.append(eos_id)  # EOS between stories
+            all_tokens.append(eos_id)
 
         # Pack into fixed-length chunks
-        # Each chunk is max_seq_len + 1 tokens (input + 1 shifted target)
         chunk_len = max_seq_len + 1
         n_chunks = len(all_tokens) // chunk_len
-        # Truncate tail tokens that don't fill a complete chunk
         all_tokens = all_tokens[: n_chunks * chunk_len]
         self.data = torch.tensor(all_tokens, dtype=torch.long).view(n_chunks, chunk_len)
 
@@ -131,3 +167,7 @@ class TinyStoriesDataset(Dataset):
     @property
     def vocab_size(self) -> int:
         return self.tokenizer.vocab_size
+
+
+# Backwards compatibility alias
+TinyStoriesDataset = PackedTextDataset
