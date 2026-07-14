@@ -17,8 +17,8 @@ class DPODataset(Dataset):
         return len(self.data)
 
     def _tokenize_pair(self, prompt, response):
-        # Format: "User: {prompt}\nAssistant: {response}"
-        full_text = f"User: {prompt}\nAssistant: {response}"
+        # Format: "User: {prompt}\nAssistant: {response}<|endoftext|>"
+        full_text = f"User: {prompt}\nAssistant: {response}{self.tokenizer.eos_token}"
         prompt_text = f"User: {prompt}\nAssistant: "
         
         # We need the input ids and a mask for which tokens belong to the response
