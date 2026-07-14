@@ -75,12 +75,13 @@ def save_checkpoint(
     path: Path,
 ) -> None:
     """Save model checkpoint in safetensors format + training state as .pt."""
-    from safetensors.torch import save_file
+    from safetensors.torch import save_model
 
     path.mkdir(parents=True, exist_ok=True)
 
     # Model weights → safetensors (ADR: never pickle)
-    save_file(model.state_dict(), path / "model.safetensors")
+    # Use save_model instead of save_file to handle weight-tied shared tensors
+    save_model(model, path / "model.safetensors")
 
     # Config → JSON
     config.to_json(path / "config.json")
@@ -104,14 +105,13 @@ def load_checkpoint(
     device: torch.device,
 ) -> int:
     """Load a checkpoint. Returns the step number to resume from."""
-    from safetensors.torch import load_file
+    from safetensors.torch import load_model
 
     if not (path / "model.safetensors").exists():
         return 0
 
-    # Load model weights
-    state_dict = load_file(path / "model.safetensors", device=str(device))
-    model.load_state_dict(state_dict)
+    # Load model weights (handles shared tensors from weight tying)
+    load_model(model, path / "model.safetensors")
 
     # Load training state
     if (path / "training_state.pt").exists():
