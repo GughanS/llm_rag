@@ -2,6 +2,7 @@ import time
 import json
 import logging
 import sys
+import os
 from fastapi import FastAPI, Depends, HTTPException, Request, Response
 from pydantic import BaseModel, Field
 import torch
@@ -56,9 +57,9 @@ except Exception as e:
 if tokenizer.pad_token is None:
     tokenizer.pad_token = tokenizer.eos_token
 
-print("Loading base model (random weights to bypass HF block)...")
-config = AutoConfig.from_pretrained(model_name)
-base_model = AutoModelForCausalLM.from_config(config).to(device)
+hf_token = os.environ.get("HF_TOKEN")
+print(f"Loading base model ({model_name}) from HuggingFace...")
+base_model = AutoModelForCausalLM.from_pretrained(model_name, token=hf_token).to(device)
 base_model.eval()
 print("Models loaded successfully.")
 
