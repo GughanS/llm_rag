@@ -135,13 +135,31 @@ class CausalSelfAttention(nn.Module):
         q = apply_rope(q, cos, sin)
         k = apply_rope(k, cos, sin)
 
-        # Attention — SDPA handles the causal mask and fused softmax internally
-        # dropout_p is only applied during training
-        attn_out = F.scaled_dot_product_attention(
-            q, k, v,
-            is_causal=True,
-            dropout_p=self.config.dropout if self.training else 0.0,
-        )
+        # Attention
+        if self.config.attn_backend == "triton":
+            from kernels.attention import triton_flash_attention
+            
+            # Triton kernel requires fp16 or bf16
+            orig_dtype = q.dtype
+            if orig_dtype not in (torch.float16, torch.bfloat16):
+                q, k, v = q.half(), k.half(), v.half()
+                
+            attn_out = triton_flash_attention(q, k, v, causal=True)
+            
+            # Revert to original dtype if we upcast
+            if attn_out.dtype != orig_dtype:
+                attn_out = attn_out.to(orig_dtype)
+                
+            # Apply dropout after attention if training
+            if self.training and self.config.dropout > 0.0:
+                attn_out = F.dropout(attn_out, p=self.config.dropout, training=True)
+        else:
+            # SDPA handles the causal mask and fused softmax internally
+            attn_out = F.scaled_dot_product_attention(
+                q, k, v,
+                is_causal=True,
+                dropout_p=self.config.dropout if self.training else 0.0,
+            )
 
         # Merge heads and project out
         attn_out = attn_out.transpose(1, 2).contiguous().view(B, T, C)
