@@ -3,7 +3,7 @@ import './index.css';
 
 // Using the hardcoded development API Key
 // In production, this would be managed securely via sessions
-const API_KEY = 'dummy_key_do_not_use_in_prod';
+const API_KEY = 'test_sk_12345';
 const API_URL = 'http://127.0.0.1:8000/generate';
 
 function App() {
