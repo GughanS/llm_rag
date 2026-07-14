@@ -25,7 +25,17 @@ REQUEST_LATENCY = Histogram("http_request_latency_seconds", "HTTP request latenc
 ACTIVE_REQUESTS = Gauge("http_active_requests", "Currently active requests")
 GPU_MEMORY = Gauge("gpu_memory_allocated_bytes", "GPU memory allocated by PyTorch")
 
+from fastapi.middleware.cors import CORSMiddleware
+
 app = FastAPI(title="LLM Serving API")
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"], # In production, restrict this to the frontend URL
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 # --- Model Loading ---
 device = "cuda" if torch.cuda.is_available() else "cpu"
