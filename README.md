@@ -13,7 +13,7 @@ End-to-end LLM engineering: custom Triton attention kernel → distributed fine-
 | 4 | DPO alignment | ✅ Complete |
 | 4.5 | Engineering standards hardening | ✅ Complete |
 | 5 | CI/CD, serving, security, observability | ✅ Complete |
-| 5.5 | Cloud & IaC (documented, not deployed) | ⬜ Not started |
+| 5.5 | Cloud & IaC (documented, not deployed) | ✅ Complete |
 | 6 | vLLM open-source contribution | ⬜ Not started |
 
 ## Key Architecture Decisions
