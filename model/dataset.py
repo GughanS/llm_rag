@@ -47,15 +47,28 @@ class TinyStoriesDataset(Dataset):
         if self.tokenizer.pad_token is None:
             self.tokenizer.pad_token = self.tokenizer.eos_token
 
-        # Load dataset
-        ds = load_dataset("roneneldan/TinyStories", split=split)
-        if max_stories is not None:
-            ds = ds.select(range(min(max_stories, len(ds))))
+        # Load dataset — use streaming to avoid bulk parquet download issues
+        # with HuggingFace's Xet CDN
+        try:
+            ds = load_dataset("roneneldan/TinyStories", split=split, streaming=True)
+            # Streaming mode: iterate and collect up to max_stories
+            stories = []
+            for i, example in enumerate(ds):
+                if max_stories is not None and i >= max_stories:
+                    break
+                stories.append(example)
+            print(f"  Loaded {len(stories)} stories via streaming")
+        except Exception:
+            # Fallback: non-streaming (requires full download)
+            ds = load_dataset("roneneldan/TinyStories", split=split)
+            if max_stories is not None:
+                ds = ds.select(range(min(max_stories, len(ds))))
+            stories = list(ds)
 
         # Tokenise all stories and concatenate into one long token stream
         all_tokens: list[int] = []
         eos_id = self.tokenizer.eos_token_id
-        for example in ds:
+        for example in stories:
             tokens = self.tokenizer.encode(example["text"])
             all_tokens.extend(tokens)
             all_tokens.append(eos_id)  # EOS between stories
