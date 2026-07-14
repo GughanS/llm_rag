@@ -114,6 +114,13 @@ class Transformer(nn.Module):
         """
         B, T = input_ids.shape
 
+        # Security Hardening: Input Validation
+        if T > self.config.max_seq_len:
+            raise ValueError(
+                f"Input sequence length ({T}) exceeds maximum sequence length "
+                f"({self.config.max_seq_len}). This prevents unexpected OOM errors."
+            )
+
         # Token embedding (no positional embedding — RoPE is in attention)
         x = self.drop(self.token_emb(input_ids))
 

@@ -72,6 +72,41 @@ def apply_rope(
     return x * cos + x_rotated * sin
 
 
+import abc
+
+class AttentionBackend(abc.ABC):
+    """Strategy pattern interface for attention backends."""
+    @abc.abstractmethod
+    def forward(self, q: torch.Tensor, k: torch.Tensor, v: torch.Tensor, config: TransformerConfig, training: bool) -> torch.Tensor:
+        pass
+
+class SDPAAttentionBackend(AttentionBackend):
+    def forward(self, q: torch.Tensor, k: torch.Tensor, v: torch.Tensor, config: TransformerConfig, training: bool) -> torch.Tensor:
+        return F.scaled_dot_product_attention(
+            q, k, v,
+            is_causal=True,
+            dropout_p=config.dropout if training else 0.0,
+        )
+
+class TritonAttentionBackend(AttentionBackend):
+    def forward(self, q: torch.Tensor, k: torch.Tensor, v: torch.Tensor, config: TransformerConfig, training: bool) -> torch.Tensor:
+        from kernels.attention import triton_flash_attention
+        
+        orig_dtype = q.dtype
+        if orig_dtype not in (torch.float16, torch.bfloat16):
+            q, k, v = q.half(), k.half(), v.half()
+            
+        attn_out = triton_flash_attention(q, k, v, causal=True)
+        
+        if attn_out.dtype != orig_dtype:
+            attn_out = attn_out.to(orig_dtype)
+            
+        if training and config.dropout > 0.0:
+            attn_out = F.dropout(attn_out, p=config.dropout, training=True)
+            
+        return attn_out
+
+
 class CausalSelfAttention(nn.Module):
     """Multi-head causal self-attention with RoPE.
 
@@ -79,8 +114,7 @@ class CausalSelfAttention(nn.Module):
         Q, K, V ← separate linear projections (not fused, for clarity)
         out     ← linear projection after concatenating heads
 
-    The causal mask is handled by SDPA's `is_causal=True` flag, which is
-    both faster and more memory-efficient than materialising a mask tensor.
+    The causal mask is handled by the AttentionBackend strategy.
     """
 
     def __init__(self, config: TransformerConfig):
@@ -98,6 +132,12 @@ class CausalSelfAttention(nn.Module):
 
         self.attn_dropout = nn.Dropout(config.dropout)
         self.resid_dropout = nn.Dropout(config.dropout)
+        
+        # Instantiate the selected AttentionBackend strategy
+        if config.attn_backend == "triton":
+            self.backend = TritonAttentionBackend()
+        else:
+            self.backend = SDPAAttentionBackend()
 
         # Precompute RoPE tables — registered as buffers (saved with state_dict,
         # moved to device with .to(), but not trained)
@@ -135,31 +175,8 @@ class CausalSelfAttention(nn.Module):
         q = apply_rope(q, cos, sin)
         k = apply_rope(k, cos, sin)
 
-        # Attention
-        if self.config.attn_backend == "triton":
-            from kernels.attention import triton_flash_attention
-            
-            # Triton kernel requires fp16 or bf16
-            orig_dtype = q.dtype
-            if orig_dtype not in (torch.float16, torch.bfloat16):
-                q, k, v = q.half(), k.half(), v.half()
-                
-            attn_out = triton_flash_attention(q, k, v, causal=True)
-            
-            # Revert to original dtype if we upcast
-            if attn_out.dtype != orig_dtype:
-                attn_out = attn_out.to(orig_dtype)
-                
-            # Apply dropout after attention if training
-            if self.training and self.config.dropout > 0.0:
-                attn_out = F.dropout(attn_out, p=self.config.dropout, training=True)
-        else:
-            # SDPA handles the causal mask and fused softmax internally
-            attn_out = F.scaled_dot_product_attention(
-                q, k, v,
-                is_causal=True,
-                dropout_p=self.config.dropout if self.training else 0.0,
-            )
+        # Execute attention via strategy
+        attn_out = self.backend.forward(q, k, v, self.config, self.training)
 
         # Merge heads and project out
         attn_out = attn_out.transpose(1, 2).contiguous().view(B, T, C)
