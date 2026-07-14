@@ -253,7 +253,7 @@ class _Attention(torch.autograd.Function):
         batch, nheads, seqlen, d_head = q.shape
         Delta = torch.empty_like(M)
         
-        BLOCK_M = 64
+        BLOCK_M = 32
         grid_pre = (triton.cdiv(seqlen, BLOCK_M), batch * nheads)
         
         _bwd_preprocess[grid_pre](
@@ -261,9 +261,10 @@ class _Attention(torch.autograd.Function):
             out.stride(0), out.stride(1), out.stride(2), out.stride(3),
             do.stride(0), do.stride(1), do.stride(2), do.stride(3),
             seqlen, BLOCK_M=BLOCK_M, D_HEAD=ctx.BLOCK_DMODEL,
+            num_stages=1,
         )
         
-        BLOCK_N = 64
+        BLOCK_N = 32
         grid = (triton.cdiv(seqlen, BLOCK_N), batch * nheads)
         
         _bwd_kernel[grid](
@@ -273,6 +274,7 @@ class _Attention(torch.autograd.Function):
             v.stride(0), v.stride(1), v.stride(2), v.stride(3),
             batch, nheads, seqlen,
             BLOCK_M=BLOCK_M, BLOCK_DMODEL=ctx.BLOCK_DMODEL, BLOCK_N=BLOCK_N,
+            num_stages=1,
         )
         
         return dq, dk, dv, None, None
