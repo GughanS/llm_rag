@@ -3,7 +3,7 @@ Dataset loading and tokenisation for causal language modelling.
 
 Supports multiple datasets:
   - TinyStories (default): Microsoft's TinyStories dataset
-  - WikiText: WikiText-103-raw-v1 (reliable fallback)
+  - OpenWebText: stas/openwebtext-10k (reliable fallback)
   - Synthetic: Random tokens for pipeline validation
 
 All datasets are tokenised with GPT-2's BPE tokenizer and packed into
@@ -66,7 +66,7 @@ class PackedTextDataset(Dataset):
 
     Supports multiple HuggingFace datasets via the `dataset_name` parameter:
       - "tinystories": roneneldan/TinyStories (text field: "text")
-      - "wikitext":    wikitext-103-raw-v1    (text field: "text")
+      - "openwebtext": stas/openwebtext-10k   (text field: "text")
 
     Args:
         dataset_name: which dataset to load
@@ -83,11 +83,10 @@ class PackedTextDataset(Dataset):
             "text_field": "text",
             "split_map": {"train": "train", "validation": "validation"},
         },
-        "wikitext": {
-            "path": "wikitext",
-            "name": "wikitext-103-raw-v1",
+        "openwebtext": {
+            "path": "stas/openwebtext-10k",
             "text_field": "text",
-            "split_map": {"train": "train", "validation": "validation"},
+            "split_map": {"train": "train", "validation": "train"}, # openwebtext-10k only has a train split
         },
     }
 
