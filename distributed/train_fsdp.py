@@ -126,6 +126,7 @@ def train(args):
     # Load model config and initialize with random weights on CPU first
     from transformers import AutoConfig
     config = AutoConfig.from_pretrained(model_name)
+    config.use_cache = False  # REQUIRED for activation checkpointing to avoid doubling KV cache
     model = AutoModelForCausalLM.from_config(config, torch_dtype=torch.bfloat16)
     
     if args.fsdp and world_size > 1:
