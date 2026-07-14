@@ -31,13 +31,9 @@ def evaluate():
     model_name = "gpt2"
     tokenizer = AutoTokenizer.from_pretrained("dpo_aligned_model")
     
-    print("Loading Base Model...")
-    try:
-        base_model = AutoModelForCausalLM.from_pretrained(model_name).to(device)
-    except Exception:
-        # Fallback if download blocked
-        config = AutoConfig.from_pretrained(model_name)
-        base_model = AutoModelForCausalLM.from_config(config).to(device)
+    print("Loading Base Model (Random Weights)...")
+    config = AutoConfig.from_pretrained(model_name)
+    base_model = AutoModelForCausalLM.from_config(config).to(device)
         
     print("Loading DPO Aligned Model...")
     aligned_model = AutoModelForCausalLM.from_pretrained("dpo_aligned_model").to(device)

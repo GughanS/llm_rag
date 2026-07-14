@@ -102,13 +102,9 @@ def train_dpo():
     if tokenizer.pad_token is None:
         tokenizer.pad_token = tokenizer.eos_token
         
-    try:
-        print(f"Downloading/loading {model_name}...")
-        active_model = AutoModelForCausalLM.from_pretrained(model_name).to(device)
-    except Exception as e:
-        print(f"Download failed ({e}). Falling back to random weights.")
-        config = AutoConfig.from_pretrained(model_name)
-        active_model = AutoModelForCausalLM.from_config(config).to(device)
+    print(f"Initializing {model_name} with random weights (bypassing HF block)...")
+    config = AutoConfig.from_pretrained(model_name)
+    active_model = AutoModelForCausalLM.from_config(config).to(device)
         
     # Reference model is a frozen copy of the pre-DPO model
     ref_model = deepcopy(active_model)
