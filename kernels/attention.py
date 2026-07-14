@@ -159,8 +159,8 @@ def _bwd_kernel(
         do_ptrs = DO + qvk_offset + offs_m_curr[:, None] * stride_qm + offs_d[None, :] * stride_qk
         do_curr = tl.load(do_ptrs, mask=offs_m_curr[:, None] < N_CTX, other=0.0)
         
-        # qk
-        qk = tl.dot(q, tl.trans(k)) * sm_scale
+        # qk (converted to base 2)
+        qk = tl.dot(q, tl.trans(k)) * (sm_scale * 1.44269504)
         
         # mask
         mask = offs_m_curr[:, None] >= offs_n[None, :]
@@ -172,7 +172,8 @@ def _bwd_kernel(
         delta_ptrs = Delta + off_hz * N_CTX + offs_m_curr
         delta = tl.load(delta_ptrs, mask=offs_m_curr < N_CTX, other=0.0)
         
-        p = tl.math.exp2(qk - m[:, None] * 1.44269504)
+        # base 2 exponentiation
+        p = tl.math.exp2(qk - m[:, None])
         
         # dv
         p_tensor = p.to(tl.float16)
@@ -244,9 +245,11 @@ class _Attention(torch.autograd.Function):
     @staticmethod
     def backward(ctx, do):
         q, k, v, out, M = ctx.saved_tensors
+        q, k, v = q.contiguous(), k.contiguous(), v.contiguous()
         do = do.contiguous()
         
-        dq = torch.zeros_like(q)
+        # Initialize dq in fp32 to avoid precision loss during atomic adds
+        dq = torch.zeros_like(q, dtype=torch.float32)
         dk = torch.empty_like(k)
         dv = torch.empty_like(v)
         
@@ -276,6 +279,9 @@ class _Attention(torch.autograd.Function):
             BLOCK_M=BLOCK_M, BLOCK_DMODEL=ctx.BLOCK_DMODEL, BLOCK_N=BLOCK_N,
             num_stages=1,
         )
+        
+        # Cast dq back to fp16/bf16
+        dq = dq.to(q.dtype)
         
         return dq, dk, dv, None, None
 
