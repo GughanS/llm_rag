@@ -119,7 +119,11 @@ class PackedTextDataset(Dataset):
             self.tokenizer.pad_token = self.tokenizer.eos_token
 
         # Load dataset — try streaming first, then fall back to full download
-        load_kwargs = {"path": ds_config["path"], "split": hf_split}
+        load_kwargs = {
+            "path": ds_config["path"],
+            "split": hf_split,
+            "trust_remote_code": True,  # Required for older datasets with load scripts
+        }
         if "name" in ds_config:
             load_kwargs["name"] = ds_config["name"]
 
