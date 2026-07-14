@@ -1,3 +1,4 @@
 pip-audit
 pytest
 pytest-cov
+httpx

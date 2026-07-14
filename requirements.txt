@@ -8,3 +8,9 @@ datasets>=2.20.0
 safetensors>=0.4.3
 wandb>=0.17.5
 pytest>=8.2.0
+
+# Phase 5: Serving
+fastapi>=0.111.0
+uvicorn>=0.30.1
+redis>=5.0.7
+prometheus-client>=0.20.0
