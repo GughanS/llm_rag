@@ -1,6 +1,6 @@
-# Refactor Notes — Phase 4.5
+# Architecture Patterns
 
-During Phase 4.5 (Engineering Standards Hardening Pass), several standard software engineering design patterns were applied to mature the codebase.
+Several standard software engineering design patterns are applied in this codebase to ensure extensibility and security.
 
 ## Patterns Applied
 

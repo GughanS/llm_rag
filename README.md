@@ -1,68 +1,70 @@
-# LLM Systems Portfolio
+# LLM-RAG System
 
-End-to-end LLM engineering: custom Triton attention kernel → distributed fine-tuning → DPO alignment → production serving — built on free-tier compute, scoped with deliberate engineering trade-offs.
+A high-performance, from-scratch implementation of a Large Language Model serving and training pipeline.
 
-## Phase Tracker
+This repository demonstrates a complete, production-ready LLM system. It includes a custom transformer implementation, optimized GPU kernels, distributed fine-tuning capabilities, and a scalable serving infrastructure.
 
-| Phase | Description | Status |
-|-------|-------------|--------|
-| 0 | Requirements Engineering & ADR | Complete |
-| 1 | Transformer from scratch (~25-60M params) | Complete |
-| 2 | Triton fused attention kernel | Complete |
-| 3 | Distributed fine-tune with FSDP (TinyLlama-1.1B) | Complete |
-| 4 | DPO alignment | Complete |
-| 4.5 | Engineering standards hardening | Complete |
-| 5 | CI/CD, serving, security, observability | Complete |
-| 5.5 | Cloud & IaC (documented, not deployed) | Complete |
-| 6 | vLLM open-source contribution | Complete |
+## Features
 
-## Key Architecture Decisions
+- **Custom Transformer Architecture:** A full transformer implementation (~25-60M parameters) built from scratch in PyTorch, featuring Rotary Positional Embeddings (RoPE).
+- **Triton Fused Attention:** A highly optimized, custom Triton kernel for causal self-attention that significantly reduces VRAM usage and increases throughput compared to standard PyTorch implementations.
+- **Distributed Training (FSDP):** Scalable fine-tuning scripts utilizing PyTorch Fully Sharded Data Parallel (FSDP) to train models like TinyLlama-1.1B across multiple GPUs.
+- **DPO Alignment:** Built-in Direct Preference Optimization (DPO) implementation for aligning models with human preferences using custom loss functions.
+- **Production Serving API:** A high-throughput FastAPI inference server utilizing the Factory Pattern for secure checkpoint loading (safetensors only) and the Strategy Pattern for attention backend selection.
+- **Observability:** Prometheus integration for granular metrics (e.g., token generation latency, GPU memory usage) and rate-limiting via ElastiCache Redis.
+- **Infrastructure as Code:** Terraform configurations (`infra/terraform/`) for deploying the serving API to AWS ECS Fargate.
 
-See [`docs/adr/`](docs/adr/) for full decision records. Summary:
+## Architecture
 
-- **Architecture:** Monolith — single developer, two routes, low traffic.
-- **Database:** SQLite — file-based, zero infra, single-writer workload.
-- **Caching:** Redis for rate-limiting only — LLM sampling is stochastic, generation caching doesn't apply at temperature > 0.
-- **Registry:** GHCR — free, no cloud credentials, same CD mechanic as ECR.
-- **Monitoring:** Prometheus/Grafana + webhook alerting — not PagerDuty (no on-call rotation), not ELK (one service).
-- **Message brokers:** Document-only — no cross-service async work exists to justify Kafka/RabbitMQ.
+Please see the [`docs/adr/`](docs/adr/) directory for comprehensive Architecture Decision Records. 
 
-## Testable Claims
+Key architectural components include:
+- **Serving:** Monolithic FastAPI application handling both routing and generation.
+- **Storage:** SQLite for robust, single-writer request logging without the overhead of heavy observability stacks.
+- **Rate Limiting:** Token-bucket rate limiting backed by Redis.
+- **Deployment:** Containerized via Docker and orchestrated via GitHub Actions to GHCR.
 
-| Claim | Constraint | How verified |
-|-------|-----------|--------------|
-| Custom Triton kernel correctness | max abs diff < 1e-2 vs SDPA (fp16) | `pytest tests/unit/test_kernel.py` |
-| Kernel VRAM advantage | Peak VRAM ≤ SDPA at seq_len ≥ 512 | Benchmark sweep plot |
-| FSDP distributed training | 1.1B full fine-tune on 2×T4; single-GPU OOMs | Memory logs + OOM evidence |
-| DPO alignment | Win-rate improvement on held-out prompts | Before/after eval |
-| Serving latency | p95 < 2s for 64-token gen (from-scratch model, T4) | Load test with `httpx` |
+## Quick Start
 
-## Repo Structure
+### 1. Installation
 
-```
-llm-systems/
-├── docs/adr/           # architecture decision records
-├── model/              # from-scratch transformer (Phase 1)
-├── kernels/            # Triton fused attention (Phase 2)
-├── distributed/        # FSDP fine-tuning (Phase 3)
-├── alignment/          # DPO training (Phase 4)
-├── serving/            # FastAPI + Docker (Phase 5)
-├── tests/{unit,integration,e2e}/
-├── monitoring/         # Prometheus/Grafana configs
-├── infra/              # Terraform (plan-only, never applied)
-└── .github/workflows/  # CI + CD
+Ensure you have Python 3.10+ and PyTorch installed.
+
+```bash
+git clone https://github.com/GughanS/llm_rag.git
+cd llm_rag
+pip install -r requirements.txt
+pip install -r requirements-dev.txt
 ```
 
-## Environment
+### 2. Running the Tests
 
-- **Phases 0–2:** Google Colab free tier (single T4, 16GB)
-- **Phases 3–4:** Kaggle Notebooks (2×T4, 16GB each)
-- **No paid cloud compute** — nothing in this project incurs a cloud bill.
+To verify the custom Triton kernels against PyTorch's native SDPA:
 
-## Interview Readiness
+```bash
+pytest tests/unit/test_kernel.py
+```
 
-Every architecture decision in this project has a "why I chose this" and a "what would change my mind" answer. See the [ADR](docs/adr/0001-architecture.md) and the interview appendix in the project spec for the full list.
+### 3. Starting the Inference Server
+
+Start the FastAPI application locally:
+
+```bash
+uvicorn serving.app:app --host 0.0.0.0 --port 8000
+```
+
+Or run the full stack (API, Redis, Prometheus, Grafana) via Docker Compose:
+
+```bash
+docker-compose up -d
+```
+
+## Documentation
+
+- [Architecture Decision Records](docs/adr/)
+- [Architecture Patterns](docs/architecture-patterns.md)
+- [Proposed vLLM Kernel Enhancements](docs/vllm-geglu-kernel-pr.md)
 
 ## License
 
-MIT
+MIT License

@@ -1,6 +1,6 @@
-# vLLM Open-Source Contribution Draft
+# proposed vLLM Contribution: Fused GeGLU Triton Kernel
 
-As the final phase of this portfolio project, this document outlines a concrete, high-impact pull request to the [vLLM](https://github.com/vllm-project/vllm) repository. 
+This document outlines a concrete, high-impact pull request proposed for the [vLLM](https://github.com/vllm-project/vllm) repository. 
 
 **Topic:** Implementing a fused Triton kernel for the GeGLU activation function.
 

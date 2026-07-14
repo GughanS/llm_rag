@@ -8,7 +8,7 @@ sequence lengths.
 
 The attention backend defaults to PyTorch's F.scaled_dot_product_attention
 (SDPA), which automatically selects FlashAttention-2 or Memory-Efficient
-Attention under the hood. Phase 2 will add a custom Triton kernel as an
+Attention under the hood. A custom Triton kernel is available as an
 alternative backend via the config.attn_backend flag.
 """
 from __future__ import annotations

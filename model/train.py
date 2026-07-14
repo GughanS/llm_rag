@@ -1,6 +1,6 @@
 """
 Training loop for the from-scratch transformer.
-Refactored in Phase 4.5 to use the Observer Pattern (Callbacks) and Factory Pattern.
+Utilizes the Observer Pattern (Callbacks) and Factory Pattern for modularity.
 """
 from __future__ import annotations
 
