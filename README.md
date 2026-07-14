@@ -6,15 +6,15 @@ End-to-end LLM engineering: custom Triton attention kernel → distributed fine-
 
 | Phase | Description | Status |
 |-------|-------------|--------|
-| 0 | Requirements Engineering & ADR | ✅ Complete |
-| 1 | Transformer from scratch (~25-60M params) | ✅ Complete |
-| 2 | Triton fused attention kernel | ✅ Complete |
-| 3 | Distributed fine-tune with FSDP (TinyLlama-1.1B) | ✅ Complete |
-| 4 | DPO alignment | ✅ Complete |
-| 4.5 | Engineering standards hardening | ✅ Complete |
-| 5 | CI/CD, serving, security, observability | ✅ Complete |
-| 5.5 | Cloud & IaC (documented, not deployed) | ✅ Complete |
-| 6 | vLLM open-source contribution | ✅ Complete |
+| 0 | Requirements Engineering & ADR | Complete |
+| 1 | Transformer from scratch (~25-60M params) | Complete |
+| 2 | Triton fused attention kernel | Complete |
+| 3 | Distributed fine-tune with FSDP (TinyLlama-1.1B) | Complete |
+| 4 | DPO alignment | Complete |
+| 4.5 | Engineering standards hardening | Complete |
+| 5 | CI/CD, serving, security, observability | Complete |
+| 5.5 | Cloud & IaC (documented, not deployed) | Complete |
+| 6 | vLLM open-source contribution | Complete |
 
 ## Key Architecture Decisions
 
