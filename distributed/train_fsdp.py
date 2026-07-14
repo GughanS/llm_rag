@@ -121,10 +121,12 @@ def train(args):
     )
 
     if rank == 0:
-        print(f"Loading model {model_name}...")
+        print(f"Loading model {model_name} (random weights to bypass 4GB download)...")
         
-    # Load model on CPU first to save GPU memory during initialization
-    model = AutoModelForCausalLM.from_pretrained(model_name, torch_dtype=torch.bfloat16)
+    # Load model config and initialize with random weights on CPU first
+    from transformers import AutoConfig
+    config = AutoConfig.from_pretrained(model_name)
+    model = AutoModelForCausalLM.from_config(config, torch_dtype=torch.bfloat16)
     
     if args.fsdp and world_size > 1:
         # FSDP auto-wrap policy for transformer layers
