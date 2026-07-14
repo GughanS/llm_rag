@@ -43,15 +43,21 @@ def test_rate_limiting():
     if not limiter.enabled:
         pytest.skip("Redis not available for rate limiter testing")
         
-    # Capacity is 5, so 5 requests should succeed
-    for _ in range(5):
+    original_rate = limiter.refill_rate
+    limiter.refill_rate = 0.0 # Prevent refill during the slow test requests
+    
+    try:
+        # Capacity is 5, so 5 requests should succeed
+        for _ in range(5):
+            response = client.post("/generate/base", json={"prompt": "Hello"}, headers={"X-API-Key": VALID_API_KEY})
+            assert response.status_code == 200
+            
+        # The 6th request should be rate limited (429)
         response = client.post("/generate/base", json={"prompt": "Hello"}, headers={"X-API-Key": VALID_API_KEY})
-        assert response.status_code == 200
-        
-    # The 6th request should be rate limited (429)
-    response = client.post("/generate/base", json={"prompt": "Hello"}, headers={"X-API-Key": VALID_API_KEY})
-    assert response.status_code == 429
-    assert response.json()["detail"] == "Too Many Requests"
+        assert response.status_code == 429
+        assert response.json()["detail"] == "Too Many Requests"
+    finally:
+        limiter.refill_rate = original_rate
 
 def test_metrics_endpoint():
     response = client.get("/metrics")
