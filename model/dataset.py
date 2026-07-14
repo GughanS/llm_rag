@@ -15,8 +15,43 @@ from __future__ import annotations
 
 import torch
 from torch.utils.data import Dataset
-from transformers import AutoTokenizer
-from datasets import load_dataset
+
+
+class SyntheticDataset(Dataset):
+    """Random-token dataset for validating the training pipeline.
+
+    Generates random token sequences so training can run without any
+    network downloads. Loss should drop from ~ln(vocab_size) towards
+    ~0 quickly, confirming the model can overfit.
+
+    Args:
+        n_samples: number of training samples to generate
+        max_seq_len: sequence length for each sample
+        vocab_size: vocabulary size (must match model config)
+    """
+
+    def __init__(
+        self,
+        n_samples: int = 2000,
+        max_seq_len: int = 512,
+        vocab_size: int = 50257,
+    ):
+        super().__init__()
+        self.max_seq_len = max_seq_len
+        self._vocab_size = vocab_size
+        chunk_len = max_seq_len + 1
+        self.data = torch.randint(0, vocab_size, (n_samples, chunk_len))
+
+    def __len__(self) -> int:
+        return self.data.shape[0]
+
+    def __getitem__(self, idx: int) -> tuple[torch.Tensor, torch.Tensor]:
+        chunk = self.data[idx]
+        return chunk[:-1], chunk[1:]
+
+    @property
+    def vocab_size(self) -> int:
+        return self._vocab_size
 
 
 class TinyStoriesDataset(Dataset):
@@ -41,6 +76,9 @@ class TinyStoriesDataset(Dataset):
     ):
         super().__init__()
         self.max_seq_len = max_seq_len
+
+        from transformers import AutoTokenizer
+        from datasets import load_dataset
 
         # Load tokenizer
         self.tokenizer = AutoTokenizer.from_pretrained(tokenizer_name)

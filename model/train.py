@@ -31,7 +31,7 @@ from torch.utils.data import DataLoader
 
 from model.config import TransformerConfig
 from model.transformer import Transformer
-from model.dataset import TinyStoriesDataset
+from model.dataset import TinyStoriesDataset, SyntheticDataset
 
 
 def set_seed(seed: int) -> None:
@@ -165,17 +165,31 @@ def train(args: argparse.Namespace) -> None:
     print(f"\nModel config: {config}")
 
     # --- Dataset ---
-    print("\nLoading TinyStories dataset...")
-    train_ds = TinyStoriesDataset(
-        split="train",
-        max_seq_len=config.max_seq_len,
-        max_stories=args.max_stories,
-    )
-    val_ds = TinyStoriesDataset(
-        split="validation",
-        max_seq_len=config.max_seq_len,
-        max_stories=args.max_stories // 10 if args.max_stories else None,
-    )
+    if args.synthetic:
+        print("\nUsing synthetic dataset (pipeline validation mode)...")
+        n_samples = args.max_stories or 2000
+        train_ds = SyntheticDataset(
+            n_samples=n_samples,
+            max_seq_len=config.max_seq_len,
+            vocab_size=config.vocab_size,
+        )
+        val_ds = SyntheticDataset(
+            n_samples=max(n_samples // 10, 50),
+            max_seq_len=config.max_seq_len,
+            vocab_size=config.vocab_size,
+        )
+    else:
+        print("\nLoading TinyStories dataset...")
+        train_ds = TinyStoriesDataset(
+            split="train",
+            max_seq_len=config.max_seq_len,
+            max_stories=args.max_stories,
+        )
+        val_ds = TinyStoriesDataset(
+            split="validation",
+            max_seq_len=config.max_seq_len,
+            max_stories=args.max_stories // 10 if args.max_stories else None,
+        )
     print(f"  Train: {len(train_ds):,} chunks")
     print(f"  Val:   {len(val_ds):,} chunks")
 
@@ -389,6 +403,8 @@ def parse_args() -> argparse.Namespace:
     # Data
     parser.add_argument("--max_stories", type=int, default=None,
                         help="Cap on stories to load (for debugging)")
+    parser.add_argument("--synthetic", action="store_true",
+                        help="Use synthetic data (no downloads, for pipeline validation)")
 
     # Logging
     parser.add_argument("--log_interval", type=int, default=50)
